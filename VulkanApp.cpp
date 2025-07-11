@@ -5,14 +5,9 @@
 #include <stdexcept>
 #include <iostream>
 #include <array>
+#include <cstring>
 
 #define MAX_FRAMES_IN_FLIGHT 2
-
-// Estructura para los vértices del cuadrado
-struct Vertex {
-    float pos[2];
-    float color[3];
-};
 
 // Vértices del cuadrado (2 triángulos)
 const std::array<Vertex, 4> vertices = {{
