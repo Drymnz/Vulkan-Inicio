@@ -1,23 +1,26 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
-#include <GLFW/glfw3.h>  // Incluir GLFW antes que otras dependencias
+#include <GLFW/glfw3.h> // Incluir GLFW antes que otras dependencias
 #include <vector>
 #include <optional>
 #include <memory>
 
-struct QueueFamilyIndices {
+struct QueueFamilyIndices
+{
     std::optional<uint32_t> graphicsFamily;
     std::optional<uint32_t> presentFamily;
 
-    bool isComplete() {
+    bool isComplete()
+    {
         return graphicsFamily.has_value() && presentFamily.has_value();
     }
 };
 
-class VulkanDevice {
+class VulkanDevice
+{
 public:
-    VulkanDevice(GLFWwindow* window);
+    VulkanDevice(GLFWwindow *window);
     ~VulkanDevice();
 
     VkDevice getDevice() const { return device; }
@@ -27,10 +30,10 @@ public:
     VkSurfaceKHR getSurface() const { return surface; }
     uint32_t getGraphicsQueueFamily() const { return graphicsQueueFamily; }
     uint32_t getPresentQueueFamily() const { return presentQueueFamily; }
-    GLFWwindow* getWindow() const { return window; }
+    GLFWwindow *getWindow() const { return window; }
 
 private:
-    GLFWwindow* window;
+    GLFWwindow *window;
     VkInstance instance;
     VkDebugUtilsMessengerEXT debugMessenger;
     VkPhysicalDevice physicalDevice;
@@ -50,6 +53,6 @@ private:
     bool isDeviceSuitable(VkPhysicalDevice device);
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
     bool checkDeviceExtensionSupport(VkPhysicalDevice device);
-    std::vector<const char*> getRequiredExtensions();
+    std::vector<const char *> getRequiredExtensions();
     bool checkValidationLayerSupport();
 };

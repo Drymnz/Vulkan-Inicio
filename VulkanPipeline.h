@@ -3,13 +3,14 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <string>
-#include <array>        // ✅ NECESARIO para std::array
-#include <glm/glm.hpp>  // Para glm::vec2 y glm::vec3
+#include <array>       // ✅ NECESARIO para std::array
+#include <glm/glm.hpp> // Para glm::vec2 y glm::vec3
 
 class VulkanDevice;
 class VulkanSwapChain;
 
-struct Vertex {
+struct Vertex
+{
     glm::vec2 pos;
     glm::vec3 color;
 
@@ -17,9 +18,10 @@ struct Vertex {
     static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions();
 };
 
-class VulkanPipeline {
+class VulkanPipeline
+{
 public:
-    VulkanPipeline(VulkanDevice* device, VulkanSwapChain* swapChain);
+    VulkanPipeline(VulkanDevice *device, VulkanSwapChain *swapChain);
     ~VulkanPipeline();
 
     void createGraphicsPipeline();
@@ -30,17 +32,16 @@ public:
     VkDescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
 
     // ✅ DECLARACIÓN QUE FALTABA
-    static std::vector<char> readFile(const std::string& filename);
+    static std::vector<char> readFile(const std::string &filename);
 
 private:
-    VulkanDevice* device;
-    VulkanSwapChain* swapChain;
+    VulkanDevice *device;
+    VulkanSwapChain *swapChain;
 
     VkPipeline graphicsPipeline;
     VkPipelineLayout pipelineLayout;
     VkDescriptorSetLayout descriptorSetLayout;
 
     void createDescriptorSetLayout();
-    VkShaderModule createShaderModule(const std::vector<char>& code);
+    VkShaderModule createShaderModule(const std::vector<char> &code);
 };
-

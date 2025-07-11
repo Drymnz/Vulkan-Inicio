@@ -218,4 +218,3 @@ std::array<VkVertexInputAttributeDescription, 2> Vertex::getAttributeDescription
     attributeDescriptions[1].offset = offsetof(Vertex, color);
     return attributeDescriptions;
 }
-

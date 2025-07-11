@@ -176,271 +176,225 @@ EOL
 
 # Create VulkanPipeline.cpp
 cat > VulkanPipeline.cpp << 'EOL'
-#include "VulkanSwapChain.h"
+#include "VulkanPipeline.h"
 #include "VulkanDevice.h"
-#include <algorithm>
+#include "VulkanSwapChain.h"
+
+#include <fstream>
+#include <iostream>
 #include <stdexcept>
-#include <limits>
-#include <GLFW/glfw3.h>
+#include <cstdint>
 
-void VulkanSwapChain::createRenderPass()
-{
-    VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = swapChainImageFormat;
-    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+std::vector<char> VulkanPipeline::readFile(const std::string& filename) {
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
-    VkAttachmentReference colorAttachmentRef{};
-    colorAttachmentRef.attachment = 0;
-    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    if (!file.is_open()) {
+        std::cerr << "No se pudo abrir el archivo: " << filename << std::endl;
+        throw std::runtime_error("Failed to open shader file: " + filename);
+    }
 
-    VkSubpassDescription subpass{};
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &colorAttachmentRef;
+    size_t fileSize = (size_t)file.tellg();
+    std::vector<char> buffer(fileSize);
 
-    VkSubpassDependency dependency{};
-    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependency.dstSubpass = 0;
-    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT; // Corregido: "PIPELINE" completo
-    dependency.srcAccessMask = 0;
-    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    file.seekg(0);
+    file.read(buffer.data(), fileSize);
 
-    VkRenderPassCreateInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO; // Corregido: "CREATE" completo
-    renderPassInfo.attachmentCount = 1;
-    renderPassInfo.pAttachments = &colorAttachment;
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpass;
-    renderPassInfo.dependencyCount = 1;
-    renderPassInfo.pDependencies = &dependency;
+    if (!file) {
+        file.close();
+        throw std::runtime_error("Failed to read shader file: " + filename);
+    }
 
-    if (vkCreateRenderPass(device->getDevice(), &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS)
-    {
-        throw std::runtime_error("failed to create render pass!");
+    file.close();
+    return buffer;
+}
+
+VulkanPipeline::VulkanPipeline(VulkanDevice* device, VulkanSwapChain* swapChain)
+    : device(device), swapChain(swapChain) {
+    createDescriptorSetLayout();
+    createGraphicsPipeline();
+}
+
+VulkanPipeline::~VulkanPipeline() {
+    destroyGraphicsPipeline();
+    vkDestroyDescriptorSetLayout(device->getDevice(), descriptorSetLayout, nullptr);
+}
+
+void VulkanPipeline::createGraphicsPipeline() {
+    std::string vertShaderPath = "shaders/vert.spv";
+    std::string fragShaderPath = "shaders/frag.spv";
+
+    auto vertShaderCode = readFile(vertShaderPath);
+    auto fragShaderCode = readFile(fragShaderPath);
+
+    VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+    VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertShaderStageInfo.module = vertShaderModule;
+    vertShaderStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragShaderStageInfo.module = fragShaderModule;
+    fragShaderStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+
+    auto bindingDescription = Vertex::getBindingDescription();
+    auto attributeDescriptions = Vertex::getAttributeDescriptions();
+
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInputInfo.vertexBindingDescriptionCount = 1;
+    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.scissorCount = 1;
+
+    VkPipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.depthClampEnable = VK_FALSE;
+    rasterizer.rasterizerDiscardEnable = VK_FALSE;
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer.lineWidth = 1.0f;
+    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizer.depthBiasEnable = VK_FALSE;
+
+    VkPipelineMultisampleStateCreateInfo multisampling{};
+    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampling.sampleShadingEnable = VK_FALSE;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    colorBlendAttachment.blendEnable = VK_FALSE;
+
+    VkPipelineColorBlendStateCreateInfo colorBlending{};
+    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlending.logicOpEnable = VK_FALSE;
+    colorBlending.logicOp = VK_LOGIC_OP_COPY;
+    colorBlending.attachmentCount = 1;
+    colorBlending.pAttachments = &colorBlendAttachment;
+    colorBlending.blendConstants[0] = 0.0f;
+    colorBlending.blendConstants[1] = 0.0f;
+    colorBlending.blendConstants[2] = 0.0f;
+    colorBlending.blendConstants[3] = 0.0f;
+
+    std::vector<VkDynamicState> dynamicStates = {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR
+    };
+    VkPipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+    dynamicState.pDynamicStates = dynamicStates.data();
+
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+    pipelineLayoutInfo.pushConstantRangeCount = 0;
+
+    if (vkCreatePipelineLayout(device->getDevice(), &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create pipeline layout!");
+    }
+
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount = 2;
+    pipelineInfo.pStages = shaderStages;
+    pipelineInfo.pVertexInputState = &vertexInputInfo;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState = &multisampling;
+    pipelineInfo.pDepthStencilState = nullptr;
+    pipelineInfo.pColorBlendState = &colorBlending;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = pipelineLayout;
+    pipelineInfo.renderPass = swapChain->getRenderPass();
+    pipelineInfo.subpass = 0;
+    pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+
+    if (vkCreateGraphicsPipelines(device->getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create graphics pipeline!");
+    }
+
+    vkDestroyShaderModule(device->getDevice(), fragShaderModule, nullptr);
+    vkDestroyShaderModule(device->getDevice(), vertShaderModule, nullptr);
+}
+
+void VulkanPipeline::destroyGraphicsPipeline() {
+    vkDestroyPipeline(device->getDevice(), graphicsPipeline, nullptr);
+    vkDestroyPipelineLayout(device->getDevice(), pipelineLayout, nullptr);
+}
+
+void VulkanPipeline::createDescriptorSetLayout() {
+    VkDescriptorSetLayoutBinding uboLayoutBinding{};
+    uboLayoutBinding.binding = 0;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutBinding.descriptorCount = 1;
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    uboLayoutBinding.pImmutableSamplers = nullptr;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = 1;
+    layoutInfo.pBindings = &uboLayoutBinding;
+
+    if (vkCreateDescriptorSetLayout(device->getDevice(), &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create descriptor set layout!");
     }
 }
 
-VulkanSwapChain::VulkanSwapChain(VulkanDevice *device, VkSurfaceKHR surface)
-    : device(device), surface(surface)
-{
-    createSwapChain();
-    createImageViews();
-    createRenderPass();
-    createFramebuffers();
+VkShaderModule VulkanPipeline::createShaderModule(const std::vector<char>& code) {
+    VkShaderModuleCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    createInfo.codeSize = code.size();
+    createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+    VkShaderModule shaderModule;
+    if (vkCreateShaderModule(device->getDevice(), &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create shader module!");
+    }
+
+    return shaderModule;
 }
 
-VulkanSwapChain::~VulkanSwapChain()
-{
-    cleanupSwapChain();
+VkVertexInputBindingDescription Vertex::getBindingDescription() {
+    VkVertexInputBindingDescription bindingDescription{};
+    bindingDescription.binding = 0;
+    bindingDescription.stride = sizeof(Vertex);
+    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    return bindingDescription;
 }
 
-void VulkanSwapChain::createSwapChain()
-{
-    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device->getPhysicalDevice());
+std::array<VkVertexInputAttributeDescription, 2> Vertex::getAttributeDescriptions() {
+    std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+    attributeDescriptions[0].binding = 0;
+    attributeDescriptions[0].location = 0;
+    attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+    attributeDescriptions[0].offset = offsetof(Vertex, pos);
 
-    VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
-    VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
-    VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
-
-    uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
-    if (swapChainSupport.capabilities.maxImageCount > 0 &&
-        imageCount > swapChainSupport.capabilities.maxImageCount)
-    {
-        imageCount = swapChainSupport.capabilities.maxImageCount;
-    }
-
-    VkSwapchainCreateInfoKHR createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    createInfo.surface = surface;
-    createInfo.minImageCount = imageCount;
-    createInfo.imageFormat = surfaceFormat.format;
-    createInfo.imageColorSpace = surfaceFormat.colorSpace;
-    createInfo.imageExtent = extent;
-    createInfo.imageArrayLayers = 1;
-    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-
-    uint32_t queueFamilyIndices[] = {device->getGraphicsQueueFamily(), device->getPresentQueueFamily()};
-    if (device->getGraphicsQueueFamily() != device->getPresentQueueFamily())
-    {
-        createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-        createInfo.queueFamilyIndexCount = 2;
-        createInfo.pQueueFamilyIndices = queueFamilyIndices;
-    }
-    else
-    {
-        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    }
-
-    createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
-    createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    createInfo.presentMode = presentMode;
-    createInfo.clipped = VK_TRUE;
-    createInfo.oldSwapchain = VK_NULL_HANDLE;
-
-    if (vkCreateSwapchainKHR(device->getDevice(), &createInfo, nullptr, &swapChain) != VK_SUCCESS)
-    {
-        throw std::runtime_error("failed to create swap chain!");
-    }
-
-    vkGetSwapchainImagesKHR(device->getDevice(), swapChain, &imageCount, nullptr);
-    swapChainImages.resize(imageCount);
-    vkGetSwapchainImagesKHR(device->getDevice(), swapChain, &imageCount, swapChainImages.data());
-
-    // ⚠️ Esto es CRUCIAL para el error que tienes
-    swapChainImageFormat = surfaceFormat.format;
-    swapChainExtent = extent;
-}
-
-void VulkanSwapChain::cleanupSwapChain()
-{
-    for (auto framebuffer : swapChainFramebuffers)
-    {
-        vkDestroyFramebuffer(device->getDevice(), framebuffer, nullptr);
-    }
-
-    for (auto imageView : swapChainImageViews)
-    {
-        vkDestroyImageView(device->getDevice(), imageView, nullptr);
-    }
-
-    vkDestroySwapchainKHR(device->getDevice(), swapChain, nullptr);
-    vkDestroyRenderPass(device->getDevice(), renderPass, nullptr);
-}
-
-SwapChainSupportDetails VulkanSwapChain::querySwapChainSupport(VkPhysicalDevice device)
-{
-    SwapChainSupportDetails details;
-
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
-
-    uint32_t formatCount;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
-
-    if (formatCount != 0)
-    {
-        details.formats.resize(formatCount);
-        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data());
-    }
-
-    uint32_t presentModeCount;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
-
-    if (presentModeCount != 0)
-    {
-        details.presentModes.resize(presentModeCount);
-        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data());
-    }
-
-    return details;
-}
-
-VkSurfaceFormatKHR VulkanSwapChain::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &availableFormats)
-{
-    for (const auto &availableFormat : availableFormats)
-    {
-        if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB &&
-            availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-        {
-            return availableFormat;
-        }
-    }
-    return availableFormats[0];
-}
-
-VkPresentModeKHR VulkanSwapChain::chooseSwapPresentMode(const std::vector<VkPresentModeKHR> &availablePresentModes)
-{
-    for (const auto &availablePresentMode : availablePresentModes)
-    {
-        if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
-        {
-            return availablePresentMode;
-        }
-    }
-    return VK_PRESENT_MODE_FIFO_KHR;
-}
-
-VkExtent2D VulkanSwapChain::chooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities)
-{
-    if (capabilities.currentExtent.width != UINT32_MAX)
-    {
-        return capabilities.currentExtent;
-    }
-    else
-    {
-        int width, height;
-        glfwGetFramebufferSize(device->getWindow(), &width, &height);
-
-        VkExtent2D actualExtent = {
-            static_cast<uint32_t>(width),
-            static_cast<uint32_t>(height)};
-
-        actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, actualExtent.width));
-        actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));
-
-        return actualExtent;
-    }
-}
-
-void VulkanSwapChain::createFramebuffers()
-{
-    auto imageViews = getImageViews();
-    swapChainFramebuffers.resize(imageViews.size());
-
-    for (size_t i = 0; i < imageViews.size(); i++)
-    {
-        VkImageView attachments[] = {imageViews[i]};
-
-        VkFramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = renderPass;
-        framebufferInfo.attachmentCount = 1;
-        framebufferInfo.pAttachments = attachments;
-        framebufferInfo.width = swapChainExtent.width;
-        framebufferInfo.height = swapChainExtent.height;
-        framebufferInfo.layers = 1;
-
-        if (vkCreateFramebuffer(device->getDevice(), &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS)
-        {
-            throw std::runtime_error("failed to create framebuffer!");
-        }
-    }
-}
-
-void VulkanSwapChain::createImageViews()
-{
-    swapChainImageViews.resize(swapChainImages.size());
-
-    for (size_t i = 0; i < swapChainImages.size(); i++)
-    {
-        VkImageViewCreateInfo viewInfo{};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = swapChainImages[i];
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = swapChainImageFormat;
-
-        viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-        viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-        viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-        viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
-
-        if (vkCreateImageView(device->getDevice(), &viewInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS)
-        {
-            throw std::runtime_error("failed to create image views!");
-        }
-    }
+    attributeDescriptions[1].binding = 0;
+    attributeDescriptions[1].location = 1;
+    attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+    attributeDescriptions[1].offset = offsetof(Vertex, color);
+    return attributeDescriptions;
 }
 EOL
 

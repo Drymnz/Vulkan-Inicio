@@ -6,15 +6,17 @@
 
 class VulkanDevice;
 
-struct SwapChainSupportDetails {
+struct SwapChainSupportDetails
+{
     VkSurfaceCapabilitiesKHR capabilities;
     std::vector<VkSurfaceFormatKHR> formats;
     std::vector<VkPresentModeKHR> presentModes;
 };
 
-class VulkanSwapChain {
+class VulkanSwapChain
+{
 public:
-    VulkanSwapChain(VulkanDevice* device, VkSurfaceKHR surface);
+    VulkanSwapChain(VulkanDevice *device, VkSurfaceKHR surface);
     ~VulkanSwapChain();
 
     void createSwapChain();
@@ -29,7 +31,7 @@ public:
     std::vector<VkImageView> getImageViews() const { return swapChainImageViews; }
 
 private:
-    VulkanDevice* device;
+    VulkanDevice *device;
     VkSurfaceKHR surface;
 
     VkSwapchainKHR swapChain;
@@ -45,7 +47,7 @@ private:
     void createFramebuffers();
 
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
-    VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
-    VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
-    VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
+    VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &availableFormats);
+    VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR> &availablePresentModes);
+    VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities);
 };
