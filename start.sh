@@ -121,6 +121,7 @@ cat > shaders/shader.frag << 'EOL'
 #version 450
 
 layout(location = 0) in vec3 fragColor;
+
 layout(location = 0) out vec4 outColor;
 
 void main() {
@@ -1061,18 +1062,16 @@ EOL
 cat > VulkanApp.h << 'EOL'
 #pragma once
 
-#include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
+#include <vulkan/vulkan.h>
 #include <memory>
 #include <vector>
-#include <cstdint>  // ← necesario para uint32_t
 
 class VulkanDevice;
 class VulkanSwapChain;
 class VulkanPipeline;
 
-class VulkanApp
-{
+class VulkanApp {
 public:
     VulkanApp();
     ~VulkanApp();
@@ -1080,7 +1079,8 @@ public:
     void run();
 
 private:
-    GLFWwindow *window;
+    GLFWwindow* window;
+    
     std::unique_ptr<VulkanDevice> device;
     std::unique_ptr<VulkanSwapChain> swapChain;
     std::unique_ptr<VulkanPipeline> pipeline;
@@ -1088,27 +1088,35 @@ private:
     VkCommandPool commandPool;
     std::vector<VkCommandBuffer> commandBuffers;
 
-    // Sincronización por frame
+    // Vertex data
+    VkBuffer vertexBuffer;
+    VkDeviceMemory vertexBufferMemory;
+    VkBuffer indexBuffer;
+    VkDeviceMemory indexBufferMemory;
+
+    // Synchronization objects
     std::vector<VkSemaphore> imageAvailableSemaphores;
     std::vector<VkSemaphore> renderFinishedSemaphores;
     std::vector<VkFence> inFlightFences;
-
-    // Sincronización por imagen (nuevo)
     std::vector<VkFence> imagesInFlight;
 
-    uint32_t currentFrame = 0;
+    size_t currentFrame;
 
     void initWindow();
     void initVulkan();
-    void mainLoop();
-    void cleanup();
-    void drawFrame();
+    void createVertexBuffer();
+    void createIndexBuffer();
     void createCommandPool();
     void createCommandBuffers();
     void createSyncObjects();
+    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void drawFrame();
+    void cleanup();
 
-    static void framebufferResizeCallback(GLFWwindow *window, int width, int height);
-    static void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods);
+    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+
+    static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
+    static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 };
 EOL
 
@@ -1120,8 +1128,24 @@ cat > VulkanApp.cpp << 'EOL'
 #include "VulkanPipeline.h"
 #include <stdexcept>
 #include <iostream>
+#include <array>
+#include <cstring>
 
 #define MAX_FRAMES_IN_FLIGHT 2
+
+// Vértices del cuadrado (2 triángulos)
+const std::array<Vertex, 4> vertices = {{
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},  // Bottom-left (rojo)
+    {{ 0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},  // Bottom-right (verde)
+    {{ 0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}},  // Top-right (azul)
+    {{-0.5f,  0.5f}, {1.0f, 1.0f, 0.0f}}   // Top-left (amarillo)
+}};
+
+// Índices para formar el cuadrado con 2 triángulos
+const std::array<uint16_t, 6> indices = {{
+    0, 1, 2,  // Primer triángulo
+    2, 3, 0   // Segundo triángulo
+}};
 
 VulkanApp::VulkanApp() {
     currentFrame = 0;
@@ -1135,6 +1159,7 @@ VulkanApp::~VulkanApp() {
 
 void VulkanApp::run() {
     while (!glfwWindowShouldClose(window)) {
+        glfwPollEvents();
         drawFrame();
     }
 
@@ -1155,14 +1180,96 @@ void VulkanApp::initVulkan() {
     swapChain = std::make_unique<VulkanSwapChain>(device.get(), device->getSurface());
     pipeline = std::make_unique<VulkanPipeline>(device.get(), swapChain.get());
 
+    createVertexBuffer();
+    createIndexBuffer();
     createCommandPool();
     createCommandBuffers();
     createSyncObjects();
 }
 
+void VulkanApp::createVertexBuffer() {
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = sizeof(vertices[0]) * vertices.size();
+    bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    if (vkCreateBuffer(device->getDevice(), &bufferInfo, nullptr, &vertexBuffer) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create vertex buffer!");
+    }
+
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(device->getDevice(), vertexBuffer, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, 
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    if (vkAllocateMemory(device->getDevice(), &allocInfo, nullptr, &vertexBufferMemory) != VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate vertex buffer memory!");
+    }
+
+    vkBindBufferMemory(device->getDevice(), vertexBuffer, vertexBufferMemory, 0);
+
+    // Copiar datos de vértices al buffer
+    void* data;
+    vkMapMemory(device->getDevice(), vertexBufferMemory, 0, bufferInfo.size, 0, &data);
+    memcpy(data, vertices.data(), (size_t) bufferInfo.size);
+    vkUnmapMemory(device->getDevice(), vertexBufferMemory);
+}
+
+void VulkanApp::createIndexBuffer() {
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = sizeof(indices[0]) * indices.size();
+    bufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    if (vkCreateBuffer(device->getDevice(), &bufferInfo, nullptr, &indexBuffer) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create index buffer!");
+    }
+
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(device->getDevice(), indexBuffer, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, 
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    if (vkAllocateMemory(device->getDevice(), &allocInfo, nullptr, &indexBufferMemory) != VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate index buffer memory!");
+    }
+
+    vkBindBufferMemory(device->getDevice(), indexBuffer, indexBufferMemory, 0);
+
+    // Copiar datos de índices al buffer
+    void* data;
+    vkMapMemory(device->getDevice(), indexBufferMemory, 0, bufferInfo.size, 0, &data);
+    memcpy(data, indices.data(), (size_t) bufferInfo.size);
+    vkUnmapMemory(device->getDevice(), indexBufferMemory);
+}
+
+uint32_t VulkanApp::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+    VkPhysicalDeviceMemoryProperties memProperties;
+    vkGetPhysicalDeviceMemoryProperties(device->getPhysicalDevice(), &memProperties);
+
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+        if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+            return i;
+        }
+    }
+
+    throw std::runtime_error("failed to find suitable memory type!");
+}
+
 void VulkanApp::createCommandPool() {
     VkCommandPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     poolInfo.queueFamilyIndex = device->getGraphicsQueueFamily();
 
     if (vkCreateCommandPool(device->getDevice(), &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
@@ -1206,7 +1313,7 @@ void VulkanApp::createSyncObjects() {
 }
 
 void VulkanApp::createCommandBuffers() {
-    commandBuffers.resize(swapChain->getFramebuffers().size());
+    commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -1217,36 +1324,74 @@ void VulkanApp::createCommandBuffers() {
     if (vkAllocateCommandBuffers(device->getDevice(), &allocInfo, commandBuffers.data()) != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate command buffers!");
     }
+}
 
-    for (size_t i = 0; i < commandBuffers.size(); ++i) {
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+void VulkanApp::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-        if (vkBeginCommandBuffer(commandBuffers[i], &beginInfo) != VK_SUCCESS) {
-            throw std::runtime_error("failed to begin recording command buffer!");
-        }
+    if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+        throw std::runtime_error("failed to begin recording command buffer!");
+    }
 
-        VkRenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = swapChain->getRenderPass();
-        renderPassInfo.framebuffer = swapChain->getFramebuffers()[i];
-        renderPassInfo.renderArea.offset = {0, 0};
-        renderPassInfo.renderArea.extent = swapChain->getExtent();
+    VkRenderPassBeginInfo renderPassInfo{};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassInfo.renderPass = swapChain->getRenderPass();
+    renderPassInfo.framebuffer = swapChain->getFramebuffers()[imageIndex];
+    renderPassInfo.renderArea.offset = {0, 0};
+    renderPassInfo.renderArea.extent = swapChain->getExtent();
 
-        VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-        renderPassInfo.clearValueCount = 1;
-        renderPassInfo.pClearValues = &clearColor;
+    VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+    renderPassInfo.clearValueCount = 1;
+    renderPassInfo.pClearValues = &clearColor;
 
-        vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-        vkCmdEndRenderPass(commandBuffers[i]);
+    vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to record command buffer!");
-        }
+    // Bind graphics pipeline
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->getPipeline());
+
+    // Bind vertex buffer
+    VkBuffer vertexBuffers[] = {vertexBuffer};
+    VkDeviceSize offsets[] = {0};
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+
+    // Bind index buffer
+    vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+    // Set viewport
+    VkViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = (float) swapChain->getExtent().width;
+    viewport.height = (float) swapChain->getExtent().height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+    // Set scissor
+    VkRect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = swapChain->getExtent();
+    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+    // Draw the square!
+    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+
+    vkCmdEndRenderPass(commandBuffer);
+
+    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+        throw std::runtime_error("failed to record command buffer!");
     }
 }
 
 void VulkanApp::cleanup() {
+    // Clean up buffers
+    vkDestroyBuffer(device->getDevice(), indexBuffer, nullptr);
+    vkFreeMemory(device->getDevice(), indexBufferMemory, nullptr);
+    
+    vkDestroyBuffer(device->getDevice(), vertexBuffer, nullptr);
+    vkFreeMemory(device->getDevice(), vertexBufferMemory, nullptr);
+
     // Clean up per-frame resources
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         vkDestroySemaphore(device->getDevice(), imageAvailableSemaphores[i], nullptr);
@@ -1258,12 +1403,15 @@ void VulkanApp::cleanup() {
         vkDestroySemaphore(device->getDevice(), renderFinishedSemaphores[i], nullptr);
     }
 
+    vkDestroyCommandPool(device->getDevice(), commandPool, nullptr);
+
     glfwDestroyWindow(window);
     glfwTerminate();
 }
 
 void VulkanApp::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
     auto app = reinterpret_cast<VulkanApp*>(glfwGetWindowUserPointer(window));
+    // Aquí puedes agregar lógica para manejar el resize
 }
 
 void VulkanApp::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
@@ -1292,7 +1440,10 @@ void VulkanApp::drawFrame() {
         &imageIndex
     );
 
-    if (result != VK_SUCCESS) {
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        // Recreate swapchain
+        return;
+    } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         throw std::runtime_error("failed to acquire swap chain image!");
     }
 
@@ -1303,6 +1454,10 @@ void VulkanApp::drawFrame() {
 
     // Mark this image as now being in use by this frame
     imagesInFlight[imageIndex] = currentFence;
+
+    // Record command buffer
+    vkResetCommandBuffer(commandBuffers[currentFrame], 0);
+    recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 
     vkResetFences(device->getDevice(), 1, &currentFence);
 
@@ -1315,7 +1470,7 @@ void VulkanApp::drawFrame() {
     submitInfo.pWaitSemaphores = waitSemaphores;
     submitInfo.pWaitDstStageMask = waitStages;
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
+    submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
 
     // Use per-image semaphore for render finished signal
     VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[imageIndex] };
@@ -1336,7 +1491,13 @@ void VulkanApp::drawFrame() {
     presentInfo.pSwapchains = swapChains;
     presentInfo.pImageIndices = &imageIndex;
 
-    vkQueuePresentKHR(device->getPresentQueue(), &presentInfo);
+    result = vkQueuePresentKHR(device->getPresentQueue(), &presentInfo);
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+        // Recreate swapchain
+    } else if (result != VK_SUCCESS) {
+        throw std::runtime_error("failed to present swap chain image!");
+    }
 
     currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
