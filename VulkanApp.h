@@ -4,6 +4,7 @@
 #include <GLFW/glfw3.h>
 #include <memory>
 #include <vector>
+#include <cstdint>  // ← necesario para uint32_t
 
 class VulkanDevice;
 class VulkanSwapChain;
@@ -22,13 +23,19 @@ private:
     std::unique_ptr<VulkanDevice> device;
     std::unique_ptr<VulkanSwapChain> swapChain;
     std::unique_ptr<VulkanPipeline> pipeline;
+
     VkCommandPool commandPool;
     std::vector<VkCommandBuffer> commandBuffers;
+
+    // Sincronización por frame
     std::vector<VkSemaphore> imageAvailableSemaphores;
     std::vector<VkSemaphore> renderFinishedSemaphores;
     std::vector<VkFence> inFlightFences;
-    size_t currentFrame = 0;
-    const int MAX_FRAMES_IN_FLIGHT = 2;
+
+    // Sincronización por imagen (nuevo)
+    std::vector<VkFence> imagesInFlight;
+
+    uint32_t currentFrame = 0;
 
     void initWindow();
     void initVulkan();
