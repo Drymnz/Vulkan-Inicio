@@ -1,0 +1,19 @@
+# Binaries and build files
+build/
+*.o
+*.out
+*.a
+*.so
+*.dll
+*.exe
+
+# Vulkan/Debug files
+*.spv
+*.log
+*.pdb
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
