@@ -33,24 +33,44 @@ project(VulkanSquare)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Find dependencies
+# Find all required packages
 find_package(glfw3 REQUIRED)
 find_package(Vulkan REQUIRED)
+find_package(glm REQUIRED)  # Añadido para GLM
 
-# Shader compilation
+# Configuración para shaders
+set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/shaders)
+set(SHADER_OUTPUT_DIR ${CMAKE_BINARY_DIR}/shaders)
+
+# Crear directorio para shaders compilados
+file(MAKE_DIRECTORY ${SHADER_OUTPUT_DIR})
+
+# Encontrar glslangValidator
 find_program(GLSL_VALIDATOR glslangValidator)
 if(GLSL_VALIDATOR)
     add_custom_command(
-        OUTPUT shaders/vert.spv shaders/frag.spv
-        COMMAND ${GLSL_VALIDATOR} -V shaders/shader.vert -o shaders/vert.spv
-        COMMAND ${GLSL_VALIDATOR} -V shaders/shader.frag -o shaders/frag.spv
-        DEPENDS shaders/shader.vert shaders/shader.frag
+        OUTPUT ${SHADER_OUTPUT_DIR}/vert.spv
+        COMMAND ${GLSL_VALIDATOR} -V ${SHADER_DIR}/shader.vert -o ${SHADER_OUTPUT_DIR}/vert.spv
+        DEPENDS ${SHADER_DIR}/shader.vert
+        COMMENT "Compiling vertex shader"
     )
-    add_custom_target(shaders ALL DEPENDS shaders/vert.spv shaders/frag.spv)
+    
+    add_custom_command(
+        OUTPUT ${SHADER_OUTPUT_DIR}/frag.spv
+        COMMAND ${GLSL_VALIDATOR} -V ${SHADER_DIR}/shader.frag -o ${SHADER_OUTPUT_DIR}/frag.spv
+        DEPENDS ${SHADER_DIR}/shader.frag
+        COMMENT "Compiling fragment shader"
+    )
+    
+    add_custom_target(shaders ALL 
+        DEPENDS ${SHADER_OUTPUT_DIR}/vert.spv ${SHADER_OUTPUT_DIR}/frag.spv
+    )
+else()
+    message(WARNING "glslangValidator not found - shaders won't be automatically compiled")
 endif()
 
-# Add executable
 add_executable(VulkanSquare 
     main.cpp
     VulkanApp.cpp
@@ -59,10 +79,21 @@ add_executable(VulkanSquare
     VulkanPipeline.cpp
 )
 
-target_link_libraries(VulkanSquare glfw Vulkan::Vulkan)
+# Configurar propiedades del objetivo
+target_include_directories(VulkanSquare PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(VulkanSquare 
+    glfw
+    Vulkan::Vulkan
+    glm::glm  # Añadido para GLM
+)
 
-# Copy shaders to build directory
-file(COPY shaders DESTINATION ${CMAKE_BINARY_DIR})
+# Copiar shaders al directorio de construcción
+add_custom_command(TARGET VulkanSquare POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${SHADER_DIR}
+    ${SHADER_OUTPUT_DIR}
+    COMMENT "Copying shaders to build directory"
+)
 EOL
 
 # Create shaders
@@ -104,6 +135,8 @@ cat > VulkanPipeline.h << 'EOL'
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <string>
+#include <array>        // ✅ NECESARIO para std::array
+#include <glm/glm.hpp>  // Para glm::vec2 y glm::vec3
 
 class VulkanDevice;
 class VulkanSwapChain;
@@ -128,6 +161,9 @@ public:
     VkPipelineLayout getLayout() const { return pipelineLayout; }
     VkDescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
 
+    // ✅ DECLARACIÓN QUE FALTABA
+    static std::vector<char> readFile(const std::string& filename);
+
 private:
     VulkanDevice* device;
     VulkanSwapChain* swapChain;
@@ -139,17 +175,44 @@ private:
     void createDescriptorSetLayout();
     VkShaderModule createShaderModule(const std::vector<char>& code);
 };
+
 EOL
 
 # Create VulkanPipeline.cpp
 cat > VulkanPipeline.cpp << 'EOL'
 #include "VulkanPipeline.h"
-#include "VulkanDevice.h"
+#include "VulkanDeVulkanPipeline.hvice.h"
 #include "VulkanSwapChain.h"
-#include <fstream>
-#include <glm/glm.hpp>
 
-VulkanPipeline::VulkanPipeline(VulkanDevice* device, VulkanSwapChain* swapChain) 
+#include <fstream>
+#include <iostream>
+#include <stdexcept>
+#include <cstdint>
+
+std::vector<char> VulkanPipeline::readFile(const std::string& filename) {
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+    if (!file.is_open()) {
+        std::cerr << "No se pudo abrir el archivo: " << filename << std::endl;
+        throw std::runtime_error("Failed to open shader file: " + filename);
+    }
+
+    size_t fileSize = (size_t)file.tellg();
+    std::vector<char> buffer(fileSize);
+
+    file.seekg(0);
+    file.read(buffer.data(), fileSize);
+
+    if (!file) {
+        file.close();
+        throw std::runtime_error("Failed to read shader file: " + filename);
+    }
+
+    file.close();
+    return buffer;
+}
+
+VulkanPipeline::VulkanPipeline(VulkanDevice* device, VulkanSwapChain* swapChain)
     : device(device), swapChain(swapChain) {
     createDescriptorSetLayout();
     createGraphicsPipeline();
@@ -161,8 +224,11 @@ VulkanPipeline::~VulkanPipeline() {
 }
 
 void VulkanPipeline::createGraphicsPipeline() {
-    auto vertShaderCode = readFile("shaders/vert.spv");
-    auto fragShaderCode = readFile("shaders/frag.spv");
+    std::string vertShaderPath = "shaders/vert.spv";
+    std::string fragShaderPath = "shaders/frag.spv";
+
+    auto vertShaderCode = readFile(vertShaderPath);
+    auto fragShaderCode = readFile(fragShaderPath);
 
     VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
     VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
@@ -217,8 +283,8 @@ void VulkanPipeline::createGraphicsPipeline() {
     multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
     VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | 
-        VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     colorBlendAttachment.blendEnable = VK_FALSE;
 
     VkPipelineColorBlendStateCreateInfo colorBlending{};
@@ -313,23 +379,6 @@ VkShaderModule VulkanPipeline::createShaderModule(const std::vector<char>& code)
     return shaderModule;
 }
 
-std::vector<char> VulkanPipeline::readFile(const std::string& filename) {
-    std::ifstream file(filename, std::ios::ate | std::ios::binary);
-
-    if (!file.is_open()) {
-        throw std::runtime_error("failed to open file!");
-    }
-
-    size_t fileSize = (size_t) file.tellg();
-    std::vector<char> buffer(fileSize);
-
-    file.seekg(0);
-    file.read(buffer.data(), fileSize);
-    file.close();
-
-    return buffer;
-}
-
 VkVertexInputBindingDescription Vertex::getBindingDescription() {
     VkVertexInputBindingDescription bindingDescription{};
     bindingDescription.binding = 0;
@@ -351,6 +400,7 @@ std::array<VkVertexInputAttributeDescription, 2> Vertex::getAttributeDescription
     attributeDescriptions[1].offset = offsetof(Vertex, color);
     return attributeDescriptions;
 }
+
 EOL
 
 # Create VulkanSwapChain.h
@@ -360,7 +410,7 @@ cat > VulkanSwapChain.h << 'EOL'
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <memory>
-
+VulkanPipeline.cpp
 class VulkanDevice;
 
 struct SwapChainSupportDetails {
@@ -413,116 +463,9 @@ cat > VulkanSwapChain.cpp << 'EOL'
 #include "VulkanSwapChain.h"
 #include "VulkanDevice.h"
 #include <algorithm>
-
-VulkanSwapChain::VulkanSwapChain(VulkanDevice* device, VkSurfaceKHR surface) 
-    : device(device), surface(surface) {
-    createSwapChain();
-    createImageViews();
-    createRenderPass();
-    createFramebuffers();
-}
-
-VulkanSwapChain::~VulkanSwapChain() {
-    cleanupSwapChain();
-}
-
-void VulkanSwapChain::createSwapChain() {
-    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device->getPhysicalDevice());
-
-    VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
-    VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
-    VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
-
-    uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
-    if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
-        imageCount = swapChainSupport.capabilities.maxImageCount;
-    }
-
-    VkSwapchainCreateInfoKHR createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    createInfo.surface = surface;
-    createInfo.minImageCount = imageCount;
-    createInfo.imageFormat = surfaceFormat.format;
-    createInfo.imageColorSpace = surfaceFormat.colorSpace;
-    createInfo.imageExtent = extent;
-    createInfo.imageArrayLayers = 1;
-    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-
-    uint32_t queueFamilyIndices[] = {device->getGraphicsQueueFamily(), device->getPresentQueueFamily()};
-
-    if (device->getGraphicsQueueFamily() != device->getPresentQueueFamily()) {
-        createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-        createInfo.queueFamilyIndexCount = 2;
-        createInfo.pQueueFamilyIndices = queueFamilyIndices;
-    } else {
-        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        createInfo.queueFamilyIndexCount = 0;
-        createInfo.pQueueFamilyIndices = nullptr;
-    }
-
-    createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
-    createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    createInfo.presentMode = presentMode;
-    createInfo.clipped = VK_TRUE;
-    createInfo.oldSwapchain = VK_NULL_HANDLE;
-
-    if (vkCreateSwapchainKHR(device->getDevice(), &createInfo, nullptr, &swapChain) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create swap chain!");
-    }
-
-    vkGetSwapchainImagesKHR(device->getDevice(), swapChain, &imageCount, nullptr);
-    swapChainImages.resize(imageCount);
-    vkGetSwapchainImagesKHR(device->getDevice(), swapChain, &imageCount, swapChainImages.data());
-
-    swapChainImageFormat = surfaceFormat.format;
-    swapChainExtent = extent;
-}
-
-void VulkanSwapChain::cleanupSwapChain() {
-    for (auto framebuffer : swapChainFramebuffers) {
-        vkDestroyFramebuffer(device->getDevice(), framebuffer, nullptr);
-    }
-
-    for (auto imageView : swapChainImageViews) {
-        vkDestroyImageView(device->getDevice(), imageView, nullptr);
-    }
-
-    vkDestroyRenderPass(device->getDevice(), renderPass, nullptr);
-    vkDestroySwapchainKHR(device->getDevice(), swapChain, nullptr);
-}
-
-void VulkanSwapChain::recreateSwapChain() {
-    cleanupSwapChain();
-    createSwapChain();
-    createImageViews();
-    createRenderPass();
-    createFramebuffers();
-}
-
-void VulkanSwapChain::createImageViews() {
-    swapChainImageViews.resize(swapChainImages.size());
-
-    for (size_t i = 0; i < swapChainImages.size(); i++) {
-        VkImageViewCreateInfo createInfo{};
-        createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        createInfo.image = swapChainImages[i];
-        createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        createInfo.format = swapChainImageFormat;
-        createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        createInfo.subresourceRange.baseMipLevel = 0;
-        createInfo.subresourceRange.levelCount = 1;
-        createInfo.subresourceRange.baseArrayLayer = 0;
-        createInfo.subresourceRange.layerCount = 1;
-
-        if (vkCreateImageView(device->getDevice(), &createInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create image views!");
-        }
-    }
-}
+#include <stdexcept>
+#include <limits>
+#include <GLFW/glfw3.h>
 
 void VulkanSwapChain::createRenderPass() {
     VkAttachmentDescription colorAttachment{};
@@ -547,13 +490,13 @@ void VulkanSwapChain::createRenderPass() {
     VkSubpassDependency dependency{};
     dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
     dependency.dstSubpass = 0;
-    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;  // Corregido: "PIPELINE" completo
     dependency.srcAccessMask = 0;
     dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
     VkRenderPassCreateInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;  // Corregido: "CREATE" completo
     renderPassInfo.attachmentCount = 1;
     renderPassInfo.pAttachments = &colorAttachment;
     renderPassInfo.subpassCount = 1;
@@ -566,92 +509,36 @@ void VulkanSwapChain::createRenderPass() {
     }
 }
 
-void VulkanSwapChain::createFramebuffers() {
-    swapChainFramebuffers.resize(swapChainImageViews.size());
-
-    for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-        VkImageView attachments[] = {
-            swapChainImageViews[i]
-        };
-
-        VkFramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = renderPass;
-        framebufferInfo.attachmentCount = 1;
-        framebufferInfo.pAttachments = attachments;
-        framebufferInfo.width = swapChainExtent.width;
-        framebufferInfo.height = swapChainExtent.height;
-        framebufferInfo.layers = 1;
-
-        if (vkCreateFramebuffer(device->getDevice(), &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create framebuffer!");
-        }
-    }
+VulkanSwapChain::VulkanSwapChain(VulkanDevice* device, VkSurfaceKHR surface)
+    : device(device), surface(surface) {
+    createSwapChain();
+    createImageViews();
+    createRenderPass();
+    createFramebuffers();
 }
 
-SwapChainSupportDetails VulkanSwapChain::querySwapChainSupport(VkPhysicalDevice device) {
-    SwapChainSupportDetails details;
-
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
-
-    uint32_t formatCount;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
-
-    if (formatCount != 0) {
-        details.formats.resize(formatCount);
-        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data());
-    }
-
-    uint32_t presentModeCount;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
-
-    if (presentModeCount != 0) {
-        details.presentModes.resize(presentModeCount);
-        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data());
-    }
-
-    return details;
+VulkanSwapChain::~VulkanSwapChain() {
+    cleanupSwapChain();
 }
 
-VkSurfaceFormatKHR VulkanSwapChain::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
-    for (const auto& availableFormat : availableFormats) {
-        if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && 
-            availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-            return availableFormat;
-        }
-    }
-    return availableFormats[0];
+void VulkanSwapChain::createSwapChain() {
 }
 
-VkPresentModeKHR VulkanSwapChain::chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
-    for (const auto& availablePresentMode : availablePresentModes) {
-        if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
-            return availablePresentMode;
-        }
+void VulkanSwapChain::cleanupSwapChain() {
+    for (auto framebuffer : swapChainFramebuffers) {
+        vkDestroyFramebuffer(device->getDevice(), framebuffer, nullptr);
     }
-    return VK_PRESENT_MODE_FIFO_KHR;
+
+    for (auto imageView : swapChainImageViews) {
+        vkDestroyImageView(device->getDevice(), imageView, nullptr);
+    }
+
+    vkDestroySwapchainKHR(device->getDevice(), swapChain, nullptr);
+    vkDestroyRenderPass(device->getDevice(), renderPass, nullptr);
 }
 
-VkExtent2D VulkanSwapChain::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
-    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
-        return capabilities.currentExtent;
-    } else {
-        int width, height;
-        glfwGetFramebufferSize(device->getWindow(), &width, &height);
-
-        VkExtent2D actualExtent = {
-            static_cast<uint32_t>(width),
-            static_cast<uint32_t>(height)
-        };
-
-        actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, 
-            capabilities.maxImageExtent.width);
-        actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, 
-            capabilities.maxImageExtent.height);
-
-        return actualExtent;
-    }
-}
+void VulkanSwapChain::createImageViews() {}
+void VulkanSwapChain::createFramebuffers() {}
 EOL
 
 # Create VulkanDevice.h
@@ -659,6 +546,7 @@ cat > VulkanDevice.h << 'EOL'
 #pragma once
 
 #include <vulkan/vulkan.h>
+#include <GLFW/glfw3.h>  // Incluir GLFW antes que otras dependencias
 #include <vector>
 #include <optional>
 #include <memory>

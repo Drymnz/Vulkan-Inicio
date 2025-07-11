@@ -1,10 +1,36 @@
 #include "VulkanPipeline.h"
 #include "VulkanDevice.h"
 #include "VulkanSwapChain.h"
-#include <fstream>
-#include <glm/glm.hpp>
 
-VulkanPipeline::VulkanPipeline(VulkanDevice* device, VulkanSwapChain* swapChain) 
+#include <fstream>
+#include <iostream>
+#include <stdexcept>
+#include <cstdint>
+
+std::vector<char> VulkanPipeline::readFile(const std::string& filename) {
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+    if (!file.is_open()) {
+        std::cerr << "No se pudo abrir el archivo: " << filename << std::endl;
+        throw std::runtime_error("Failed to open shader file: " + filename);
+    }
+
+    size_t fileSize = (size_t)file.tellg();
+    std::vector<char> buffer(fileSize);
+
+    file.seekg(0);
+    file.read(buffer.data(), fileSize);
+
+    if (!file) {
+        file.close();
+        throw std::runtime_error("Failed to read shader file: " + filename);
+    }
+
+    file.close();
+    return buffer;
+}
+
+VulkanPipeline::VulkanPipeline(VulkanDevice* device, VulkanSwapChain* swapChain)
     : device(device), swapChain(swapChain) {
     createDescriptorSetLayout();
     createGraphicsPipeline();
@@ -16,8 +42,11 @@ VulkanPipeline::~VulkanPipeline() {
 }
 
 void VulkanPipeline::createGraphicsPipeline() {
-    auto vertShaderCode = readFile("shaders/vert.spv");
-    auto fragShaderCode = readFile("shaders/frag.spv");
+    std::string vertShaderPath = "shaders/vert.spv";
+    std::string fragShaderPath = "shaders/frag.spv";
+
+    auto vertShaderCode = readFile(vertShaderPath);
+    auto fragShaderCode = readFile(fragShaderPath);
 
     VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
     VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
@@ -72,8 +101,8 @@ void VulkanPipeline::createGraphicsPipeline() {
     multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
     VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | 
-        VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     colorBlendAttachment.blendEnable = VK_FALSE;
 
     VkPipelineColorBlendStateCreateInfo colorBlending{};
@@ -166,23 +195,6 @@ VkShaderModule VulkanPipeline::createShaderModule(const std::vector<char>& code)
     }
 
     return shaderModule;
-}
-
-std::vector<char> VulkanPipeline::readFile(const std::string& filename) {
-    std::ifstream file(filename, std::ios::ate | std::ios::binary);
-
-    if (!file.is_open()) {
-        throw std::runtime_error("failed to open file!");
-    }
-
-    size_t fileSize = (size_t) file.tellg();
-    std::vector<char> buffer(fileSize);
-
-    file.seekg(0);
-    file.read(buffer.data(), fileSize);
-    file.close();
-
-    return buffer;
 }
 
 VkVertexInputBindingDescription Vertex::getBindingDescription() {

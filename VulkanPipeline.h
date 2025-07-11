@@ -3,6 +3,8 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <string>
+#include <array>        // ✅ NECESARIO para std::array
+#include <glm/glm.hpp>  // Para glm::vec2 y glm::vec3
 
 class VulkanDevice;
 class VulkanSwapChain;
@@ -26,6 +28,9 @@ public:
     VkPipeline getPipeline() const { return graphicsPipeline; }
     VkPipelineLayout getLayout() const { return pipelineLayout; }
     VkDescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
+
+    // ✅ DECLARACIÓN QUE FALTABA
+    static std::vector<char> readFile(const std::string& filename);
 
 private:
     VulkanDevice* device;
