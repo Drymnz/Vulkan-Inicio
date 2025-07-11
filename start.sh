@@ -181,7 +181,7 @@ EOL
 # Create VulkanPipeline.cpp
 cat > VulkanPipeline.cpp << 'EOL'
 #include "VulkanPipeline.h"
-#include "VulkanDeVulkanPipeline.hvice.h"
+#include "VulkanDevice.h"
 #include "VulkanSwapChain.h"
 
 #include <fstream>
@@ -410,7 +410,7 @@ cat > VulkanSwapChain.h << 'EOL'
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <memory>
-VulkanPipeline.cpp
+
 class VulkanDevice;
 
 struct SwapChainSupportDetails {

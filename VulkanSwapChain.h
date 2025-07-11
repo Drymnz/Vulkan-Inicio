@@ -3,7 +3,7 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <memory>
-VulkanPipeline.cpp
+
 class VulkanDevice;
 
 struct SwapChainSupportDetails {
