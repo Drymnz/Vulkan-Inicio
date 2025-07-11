@@ -1,5 +1,5 @@
 #include "VulkanPipeline.h"
-#include "VulkanDevice.h"
+#include "VulkanDeVulkanPipeline.hvice.h"
 #include "VulkanSwapChain.h"
 
 #include <fstream>
@@ -218,3 +218,4 @@ std::array<VkVertexInputAttributeDescription, 2> Vertex::getAttributeDescription
     attributeDescriptions[1].offset = offsetof(Vertex, color);
     return attributeDescriptions;
 }
+
