@@ -11,6 +11,9 @@ public:
     void run();
 
 private:
+    VkDevice device;
+    VkQueue graphicsQueue;
+
     GLFWwindow *window;
     VkInstance instance;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
@@ -32,14 +35,17 @@ private:
     void mainLoop();
     void cleanup();
     void createInstance();
-    void pickPhysicalDevice(); // <--- Nuevo método
+    void pickPhysicalDevice();                      // <--- Nuevo método
     bool isDeviceSuitable(VkPhysicalDevice device); // <--- Nuevo método
     bool checkValidationLayerSupport();
+    void createLogicalDevice();
 
-    struct QueueFamilyIndices {
+    struct QueueFamilyIndices
+    {
         std::optional<uint32_t> graphicsFamily;
 
-        bool isComplete() {
+        bool isComplete()
+        {
             return graphicsFamily.has_value();
         }
     };
