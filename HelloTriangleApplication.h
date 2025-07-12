@@ -13,9 +13,13 @@ public:
 private:
     VkDevice device;
     VkQueue graphicsQueue;
+    VkSurfaceKHR surface;
+
+    
 
     GLFWwindow *window;
     VkInstance instance;
+    
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 
     const uint32_t WIDTH = 800;
@@ -39,6 +43,7 @@ private:
     bool isDeviceSuitable(VkPhysicalDevice device); // <--- Nuevo método
     bool checkValidationLayerSupport();
     void createLogicalDevice();
+    void createSurface();
 
     struct QueueFamilyIndices
     {
