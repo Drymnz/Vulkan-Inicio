@@ -1,13 +1,22 @@
-CFLAGS = -std=c++17 -O2
+CFLAGS = -std=c++17 -O2 -I.
 LDFLAGS = -lglfw -lvulkan -ldl -lpthread -lX11 -lXxf86vm -lXrandr -lXi
 
-VulkanTest: main.cpp
-	g++ $(CFLAGS) -o VulkanTest main.cpp $(LDFLAGS)
+SOURCES = main.cpp HelloTriangleApplication.cpp
+OBJECTS = $(SOURCES:.cpp=.o)
+EXECUTABLE = VulkanTest
+
+all: $(EXECUTABLE)
+
+$(EXECUTABLE): $(OBJECTS)
+	g++ $(CFLAGS) -o $@ $(OBJECTS) $(LDFLAGS)
+
+%.o: %.cpp HelloTriangleApplication.h
+	g++ $(CFLAGS) -c $< -o $@
 
 .PHONY: test clean
 
-test: VulkanTest
-	./VulkanTest
+test: $(EXECUTABLE)
+	./$(EXECUTABLE)
 
 clean:
-	rm -f VulkanTest
+	rm -f $(EXECUTABLE) $(OBJECTS)
