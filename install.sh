@@ -303,4 +303,4 @@ main() {
 }
 
 # Ejecutar función principal
-main "$@"
+main "$@" GLFWwindow* window; // <- Esta es la línea que faltaba
