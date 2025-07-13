@@ -62,6 +62,10 @@ private:
     VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR> &availablePresentModes);
     VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities);
 
+    //Vistas de imágenes
+    std::vector<VkImageView> swapChainImageViews;
+
+
     // --- Swap chain objects
     VkSwapchainKHR swapChain;
     std::vector<VkImage> swapChainImages;
@@ -72,6 +76,10 @@ private:
     bool isDeviceSuitable(VkPhysicalDevice device);
     bool checkValidationLayerSupport();
     bool checkDeviceExtensionSupport(VkPhysicalDevice device);
+    void createImageViews();
+
+
+    void createGraphicsPipeline(); //geometria simple
 
     // --- Queue family discovery
     struct QueueFamilyIndices
@@ -98,6 +106,7 @@ private:
 
         return details;
     }
+
 
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
 };
