@@ -20,3 +20,18 @@ test: $(EXECUTABLE)
 
 clean:
 	rm -f $(EXECUTABLE) $(OBJECTS)
+
+	SHADER_DIR = shaders
+SHADER_SRCS = $(SHADER_DIR)/triangle.vert $(SHADER_DIR)/triangle.frag
+SHADER_BINS = $(SHADER_SRCS:.vert=.vert.spv)
+SHADER_BINS += $(SHADER_SRCS:.frag=.frag.spv)
+
+GLSLANG_VALIDATOR = glslangValidator
+
+all: $(EXECUTABLE) $(SHADER_BINS)
+
+$(SHADER_DIR)/%.spv: $(SHADER_DIR)/%
+	$(GLSLANG_VALIDATOR) -V $< -o $@
+
+clean:
+	rm -f $(EXECUTABLE) $(OBJECTS) $(SHADER_BINS)
