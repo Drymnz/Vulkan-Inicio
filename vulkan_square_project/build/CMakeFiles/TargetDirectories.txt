@@ -1,3 +1,0 @@
-/home/drymnz/Proyectos/Cuadrado/vulkan_square_project/build/CMakeFiles/VulkanSquare.dir
-/home/drymnz/Proyectos/Cuadrado/vulkan_square_project/build/CMakeFiles/edit_cache.dir
-/home/drymnz/Proyectos/Cuadrado/vulkan_square_project/build/CMakeFiles/rebuild_cache.dir

@@ -1,1 +1,0 @@
-/usr/bin/c++ -Wl,--dependency-file=CMakeFiles/VulkanSquare.dir/link.d CMakeFiles/VulkanSquare.dir/src/main.cpp.o CMakeFiles/VulkanSquare.dir/src/VulkanApp.cpp.o -o VulkanSquare  /lib/libvulkan.so /usr/lib/libglfw.so.3.4 /usr/lib/libglm.a
