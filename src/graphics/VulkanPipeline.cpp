@@ -1,6 +1,6 @@
-#include "VulkanPipeline.h"
-#include "VulkanDevice.h"
-#include "VulkanSwapChain.h"
+#include "graphics/VulkanPipeline.h"
+#include "core/VulkanDevice.h"
+#include "core/VulkanSwapChain.h"
 
 #include <fstream>
 #include <iostream>

@@ -1,7 +1,7 @@
-#include "VulkanApp.h"
-#include "VulkanDevice.h"
-#include "VulkanSwapChain.h"
-#include "VulkanPipeline.h"
+#include "core/VulkanApp.h"
+#include "core/VulkanDevice.h"
+#include "core/VulkanSwapChain.h"
+#include "graphics/VulkanPipeline.h"
 #include <stdexcept>
 #include <iostream>
 #include <array>

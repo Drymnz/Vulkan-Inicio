@@ -26,14 +26,14 @@ if(GLSL_VALIDATOR)
         DEPENDS ${SHADER_DIR}/shader.vert
         COMMENT "Compiling vertex shader"
     )
-    
+
     add_custom_command(
         OUTPUT ${SHADER_OUTPUT_DIR}/frag.spv
         COMMAND ${GLSL_VALIDATOR} -V ${SHADER_DIR}/shader.frag -o ${SHADER_OUTPUT_DIR}/frag.spv
         DEPENDS ${SHADER_DIR}/shader.frag
         COMMENT "Compiling fragment shader"
     )
-    
+
     add_custom_target(shaders ALL 
         DEPENDS ${SHADER_OUTPUT_DIR}/vert.spv ${SHADER_OUTPUT_DIR}/frag.spv
     )
@@ -42,19 +42,23 @@ else()
 endif()
 
 add_executable(VulkanSquare 
-    main.cpp
-    VulkanApp.cpp
-    VulkanDevice.cpp
-    VulkanSwapChain.cpp
-    VulkanPipeline.cpp
+    src/main.cpp
+    src/core/VulkanApp.cpp
+    src/core/VulkanDevice.cpp
+    src/core/VulkanSwapChain.cpp
+    src/graphics/VulkanPipeline.cpp
 )
 
-# Configurar propiedades del objetivo
-target_include_directories(VulkanSquare PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+# Incluir directorios para headers
+target_include_directories(VulkanSquare PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+# Vincular bibliotecas necesarias
 target_link_libraries(VulkanSquare 
     glfw
     Vulkan::Vulkan
-    glm::glm  # Añadido para GLM
+    glm::glm
 )
 
 # Copiar shaders al directorio de construcción
