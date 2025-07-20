@@ -9,19 +9,27 @@
 
 #define MAX_FRAMES_IN_FLIGHT 2
 
-// Vértices del cuadrado (2 triángulos)
+
 const std::array<Vertex, 4> vertices = {{
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}}, // Bottom-left (rojo)
-    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},  // Bottom-right (verde)
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},   // Top-right (azul)
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 0.0f}}   // Top-left (amarillo)
+    // Cuadrado (color celeste)
+    {{-0.5f, -0.5f}, {0.5f, 0.8f, 1.0f}}, // 0
+    {{ 0.5f, -0.5f}, {0.5f, 0.8f, 1.0f}}, // 1
+    {{-0.5f,  0.5f}, {0.5f, 0.8f, 1.0f}}, // 2
+    // Línea diagonal (color negro)
+    //{{-0.5f,  0.5f}, {0.0f, 0.0f, 0.0f}}, // 4
 }};
 
-// Índices para formar el cuadrado con 2 triángulos
-const std::array<uint16_t, 6> indices = {{
-    0, 1, 2, // Primer triángulo
-    2, 3, 0  // Segundo triángulo
+const std::array<uint16_t, 4> indices = {{
+    0, 1,2 // línea horizontal
 }};
+/**
+ * Se esta renderizando de izquierda a derecha.
+ * Arriba a abajo
+ * primer cuadrente (+,-)
+ * segundo cuadrente (-,-)
+ * tercer cuadrente (-,+)
+ * cuarto cuadrente (+,+)
+ */
 
 VulkanApp::VulkanApp()
 {
